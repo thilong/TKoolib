@@ -106,6 +106,10 @@ func removeAll(where: (Item) -> Bool)
 
 ### 2.2 本地增删
 
+`insert(_:at:)` / `insert(contentsOf:at:)` / `replace(_:)` / `remove(_:)` / `remove(at:)` / `removeAll(where:)`
+都只动本地数组，**不改分页游标**（插入/删除都不应该让下一页跳过一条）；`deduplicatesByID` 打开时
+`insert` 遇到同 id 会就地替换，不会产生重复行。
+
 `remove(_:)` / `remove(at:)` / `removeAll(where:)` 只动本地数组，**不改分页游标** ——
 游标记的是「服务端已经取到第几条」，本地删掉一条不应该让下一页跳过一条（有单测固定）。
 

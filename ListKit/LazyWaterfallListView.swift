@@ -28,6 +28,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
   private let spacing: CGFloat
   private let horizontalInset: CGFloat
   private let itemHeight: (Item, CGFloat) -> CGFloat
+  private let appearance: PagedListAppearance
   private let cell: (Item) -> Cell
 
   @State private var containerWidth: CGFloat = 0
@@ -43,6 +44,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
     columns: Int = 2,
     spacing: CGFloat = 12,
     horizontalInset: CGFloat = 16,
+    appearance: PagedListAppearance = .default,
     itemHeight: @escaping (Item, CGFloat) -> CGFloat,
     @ViewBuilder cell: @escaping (Item) -> Cell
   ) {
@@ -51,6 +53,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
     self.spacing = spacing
     self.horizontalInset = horizontalInset
     self.itemHeight = itemHeight
+    self.appearance = appearance
     self.cell = cell
   }
 
@@ -67,7 +70,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
         }
 
         // 只负责显示加载/失败/到底状态，触发交给每列最后一个元素的 onAppear。
-        LoadMoreFooter(model: model, triggersLoad: false)
+        LoadMoreFooter(model: model, triggersLoad: false, appearance: appearance)
       }
     }
     .onGeometryChange(for: CGFloat.self) { proxy in
@@ -79,7 +82,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
       await model.refresh()
     }
     .overlay {
-      PagedListPlaceholder(model: model)
+      PagedListPlaceholder(model: model, appearance: appearance)
     }
     .task {
       await model.loadInitialIfNeeded()

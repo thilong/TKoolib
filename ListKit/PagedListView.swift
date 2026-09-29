@@ -26,6 +26,7 @@ import SwiftUI
 struct LoadMoreFooter<Item: Identifiable>: View {
     let model: PagedListModel<Item>
     var triggersLoad: Bool = true
+    var appearance: PagedListAppearance = .default
     
     var body: some View {
         Group {
@@ -33,14 +34,14 @@ struct LoadMoreFooter<Item: Identifiable>: View {
             case .idle:
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("加载中…")
+                    Text(appearance.loadingText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             case .loading:
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("加载中…")
+                    Text(appearance.loadingText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -50,14 +51,14 @@ struct LoadMoreFooter<Item: Identifiable>: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    Button("重试") {
+                    Button(appearance.retryText) {
                         Task { await model.retryLoadMore() }
                     }
                     .buttonStyle(.bordered)
                 }
             case .exhausted:
-                if !model.items.isEmpty {
-                    Text("没有更多了")
+                if !model.items.isEmpty, !appearance.exhaustedText.isEmpty {
+                    Text(appearance.exhaustedText)
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
                         .accessibilityIdentifier("listkit.exhausted")
@@ -82,26 +83,39 @@ struct LoadMoreFooter<Item: Identifiable>: View {
 @MainActor
 struct PagedListPlaceholder<Item: Identifiable>: View {
     let model: PagedListModel<Item>
+    var appearance: PagedListAppearance = .default
     
     var body: some View {
         if model.items.isEmpty {
             switch model.phase {
             case .idle, .loadingFirstPage:
-                ProgressView()
-                    .controlSize(.large)
+                if let loadingView = appearance.loadingView {
+                    loadingView
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
             case .failed(let message):
-                ContentUnavailableView {
-                    Label("加载失败", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("重试") {
-                        Task { await model.retryInitialLoad() }
+                if let failedView = appearance.failedView {
+                    failedView(message)
+                } else {
+                    ContentUnavailableView {
+                        Label(appearance.failedTitle, systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button(appearance.retryText) {
+                            Task { await model.retryInitialLoad() }
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             case .loaded:
-                ContentUnavailableView("暂无内容", systemImage: "tray")
+                if let emptyView = appearance.emptyView {
+                    emptyView
+                } else {
+                    ContentUnavailableView(appearance.emptyTitle, systemImage: "tray")
+                }
             }
         }
     }
@@ -131,15 +145,18 @@ public enum PagedListStyle: String, CaseIterable, Identifiable, Sendable {
 public struct PagedListView<Item: Identifiable, Cell: View>: View {
     private let model: PagedListModel<Item>
     private let style: PagedListStyle
+    private let appearance: PagedListAppearance
     private let cell: (Item) -> Cell
     
     public init(
         model: PagedListModel<Item>,
         style: PagedListStyle = .list,
+        appearance: PagedListAppearance = .default,
         @ViewBuilder cell: @escaping (Item) -> Cell
     ) {
         self.model = model
         self.style = style
+        self.appearance = appearance
         self.cell = cell
     }
     
@@ -170,7 +187,7 @@ public struct PagedListView<Item: Identifiable, Cell: View>: View {
             await model.refresh()
         }
         .overlay {
-            PagedListPlaceholder(model: model)
+            PagedListPlaceholder(model: model, appearance: appearance)
         }
         .task {
             await model.loadInitialIfNeeded()

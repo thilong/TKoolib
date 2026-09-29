@@ -165,7 +165,40 @@ public final class PagedListModel<Item: Identifiable> {
     loadMorePhase = .idle
   }
 
-  // MARK: 本地增删
+  // MARK: 本地增删改
+
+  /// 本地插入一条（发布新帖、插入自己的新评论…）。
+  ///
+  /// * 默认插到最前；`at` 越界会被夹到合法范围
+  /// * `deduplicatesByID == true` 时若同 id 已存在则**就地替换**，不会出现重复行
+  /// * 与 `remove` 一样**不改分页游标**：游标记的是「服务端已经取到第几条」，
+  ///   本地插入不应该让下一页跳过一条
+  public func insert(_ item: Item, at index: Int = 0) {
+    if deduplicatesByID, let existing = items.firstIndex(where: { $0.id == item.id }) {
+      items[existing] = item
+      return
+    }
+    let target = min(max(index, 0), items.count)
+    items.insert(item, at: target)
+    seenIDs.insert(item.id)
+  }
+
+  /// 批量插入，保持传入顺序（`at` 为起始下标）
+  public func insert(contentsOf newItems: [Item], at index: Int = 0) {
+    guard !newItems.isEmpty else { return }
+    for (offset, item) in newItems.enumerated() {
+      insert(item, at: index + offset)
+    }
+  }
+
+  /// 就地替换同 id 的元素（点赞后更新计数、编辑后更新内容…）。
+  /// 返回是否找到并替换；本地不存在的元素如需插入请用 `insert`。
+  @discardableResult
+  public func replace(_ item: Item) -> Bool {
+    guard let index = items.firstIndex(where: { $0.id == item.id }) else { return false }
+    items[index] = item
+    return true
+  }
 
   /// 本地移除一条（收藏页取消收藏、屏蔽某人、删除草稿…）。
   ///

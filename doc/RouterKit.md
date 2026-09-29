@@ -52,6 +52,25 @@ SwiftUITestProject/RouterKit/
 | `SafariRouter` 的 openURL/onOpenURL | `.withRouterURLHandling(router)` | 只做路由，不含 App 内 Safari |
 | `OpenURLAction.Result` | `URLHandlingResult` | 额外提供 `Equatable`，便于断言 |
 
+### 4.5 Universal Link（`https://` 深链）
+
+自定义 scheme 走 `onOpenURL`，**Universal Link 走 `onContinueUserActivity(NSUserActivityTypeBrowsingWeb)`**，
+两者共用同一个 `RouterPath.handle(url:)`，因此解析规则只写一份：
+
+```swift
+RouterHost(router: router) { RootView() } route: { … } sheet: { … }
+  .withUniversalLinkHandling(router, allowedHosts: ["example.com"])
+```
+
+* `allowedHosts` 传 `nil` 表示不限制；**建议显式传自己的域名**，否则任意 https 链接都会被当成深链；
+* 命中 `routeResolver` → push；未命中 → `urlHandler`；仍未处理 → 交回系统（Safari）；
+* App 侧前提（缺一不可）：
+  1. Associated Domains 里配置 `applinks:<域名>`；
+  2. 域名根目录提供 `apple-app-site-association`；
+  3. 注册 `router.routeResolver`（例如 `ClosureRouteResolver`）。
+* UIKit 生命周期（`scene(_:continue:)`）没有 SwiftUI 的 `onContinueUserActivity`，
+  自行把 `webpageURL` 交给同一个 `handle(url:)` 即可。
+
 保留未实现的部分（按需自行扩展）：visionOS 的 `openWindow` / `WindowDestinationEditor`、
 App 内 `SFSafariViewController`、`handleStatus(status:url:)` 这类依赖网络与
 Mastodon 客户端的判断。
