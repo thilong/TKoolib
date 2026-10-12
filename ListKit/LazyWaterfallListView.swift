@@ -29,6 +29,8 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
   private let horizontalInset: CGFloat
   private let itemHeight: (Item, CGFloat) -> CGFloat
   private let appearance: PagedListAppearance
+  private let scrollToTopTrigger: Int
+  private let onScrollOffsetChange: ((CGFloat) -> Void)?
   private let cell: (Item) -> Cell
 
   @State private var containerWidth: CGFloat = 0
@@ -38,6 +40,8 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
   ///   - spacing: 列间距与列内行距
   ///   - itemHeight: `(元素, 列宽) -> 高度`。由数据提供（例如 `列宽 / 宽高比`），
   ///     不需要先渲染元素，所以列分配可以提前算出来 —— 这是能懒加载的前提。
+  ///   - scrollToTopTrigger: 值每变化一次，列表平滑滚回顶部（例如再次点击当前 Tab）。
+  ///   - onScrollOffsetChange: 滚动偏移回调（向上滚为正，iOS 18+），用于收起大标题等。
   ///   - cell: 会被裁剪到给定尺寸（元素高度以 `itemHeight` 为准）。
   public init(
     model: PagedListModel<Item>,
@@ -45,6 +49,8 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
     spacing: CGFloat = 12,
     horizontalInset: CGFloat = 16,
     appearance: PagedListAppearance = .default,
+    scrollToTopTrigger: Int = 0,
+    onScrollOffsetChange: ((CGFloat) -> Void)? = nil,
     itemHeight: @escaping (Item, CGFloat) -> CGFloat,
     @ViewBuilder cell: @escaping (Item) -> Cell
   ) {
@@ -54,6 +60,8 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
     self.horizontalInset = horizontalInset
     self.itemHeight = itemHeight
     self.appearance = appearance
+    self.scrollToTopTrigger = scrollToTopTrigger
+    self.onScrollOffsetChange = onScrollOffsetChange
     self.cell = cell
   }
 
@@ -66,37 +74,48 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
     }
   }
 
+  private static var topAnchorID: String { "listkit.waterfall.top" }
+
   @ViewBuilder
   private func waterfall(containerWidth measuredWidth: CGFloat) -> some View {
-    ScrollView {
-      VStack(spacing: 0) {
-        if columnWidth > 0 {
-          HStack(alignment: .top, spacing: spacing) {
-            ForEach(columnBuckets.indices, id: \.self) { columnIndex in
-              columnView(columnBuckets[columnIndex])
-            }
-          }
-          .padding(.horizontal, horizontalInset)
-        }
+    ScrollViewReader { proxy in
+      ScrollView {
+        VStack(spacing: 0) {
+          // 回到顶部的锚点
+          Color.clear.frame(height: 0).id(Self.topAnchorID)
 
-        // 只负责显示加载/失败/到底状态，触发交给每列最后一个元素的 onAppear。
-        LoadMoreFooter(model: model, triggersLoad: false, appearance: appearance)
+          if columnWidth > 0 {
+            HStack(alignment: .top, spacing: spacing) {
+              ForEach(columnBuckets.indices, id: \.self) { columnIndex in
+                columnView(columnBuckets[columnIndex])
+              }
+            }
+            .padding(.horizontal, horizontalInset)
+          }
+
+          // 只负责显示加载/失败/到底状态，触发交给每列最后一个元素的 onAppear。
+          LoadMoreFooter(model: model, triggersLoad: false, appearance: appearance)
+        }
+      }
+      .onAppear { containerWidth = measuredWidth }
+      .onChange(of: measuredWidth) { _, w in containerWidth = w }
+      .onChange(of: scrollToTopTrigger) { _, _ in
+        withAnimation(.snappy) { proxy.scrollTo(Self.topAnchorID, anchor: .top) }
+      }
+      .modifier(ScrollOffsetObserver(onChange: onScrollOffsetChange))
+      .refreshable {
+        await model.refresh()
+      }
+
+      .overlay {
+        PagedListPlaceholder(model: model, appearance: appearance)
+      }
+      .task {
+        await model.loadInitialIfNeeded()
       }
     }
-    .onAppear { containerWidth = measuredWidth }
-    .onChange(of: measuredWidth) { _, w in containerWidth = w }
-    .refreshable {
-      await model.refresh()
-    }
-
-    .overlay {
-      PagedListPlaceholder(model: model, appearance: appearance)
-    }
-    .task {
-      await model.loadInitialIfNeeded()
-    }
   }
-    
+
   // MARK: 列
 
   private var columnCount: Int { max(1, columns) }
@@ -147,5 +166,22 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
       }
     }
     .frame(width: columnWidth)
+  }
+}
+
+/// 滚动偏移观察（iOS 18 的 onScrollGeometryChange；更低版本不回调）
+private struct ScrollOffsetObserver: ViewModifier {
+  let onChange: ((CGFloat) -> Void)?
+
+  func body(content: Content) -> some View {
+    if #available(iOS 18.0, *), let onChange {
+      content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+        geometry.contentOffset.y + geometry.contentInsets.top
+      } action: { _, newValue in
+        onChange(newValue)
+      }
+    } else {
+      content
+    }
   }
 }
