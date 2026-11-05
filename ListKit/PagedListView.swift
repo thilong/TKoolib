@@ -82,9 +82,10 @@ struct PagedListPlaceholder<Item: Identifiable>: View {
     var appearance: PagedListAppearance = .default
     
     var body: some View {
-        // 首屏加载中（不管列表里有没有数据）都盖 loading mask；
+        // 首屏加载中都盖 loading mask（切筛选条件时旧内容已经不对应新条件）；
+        // 例外：用户下拉刷新且已有数据，顶部已经有系统刷新圈，不再盖住列表。
         // 失败 / 空态仍只在列表为空时显示，避免刷新失败时把已有内容盖住。
-        if model.phase == .loadingFirstPage {
+        if model.phase == .loadingFirstPage, !(model.isPullRefreshing && !model.items.isEmpty) {
             loadingPlaceholder
         } else if model.items.isEmpty {
             switch model.phase {
@@ -190,7 +191,7 @@ public struct PagedListView<Item: Identifiable, Cell: View>: View {
             }
         }
         .refreshable {
-            await model.refresh()
+            await model.pullToRefresh()
         }
         .overlay {
             PagedListPlaceholder(model: model, appearance: appearance)

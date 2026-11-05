@@ -104,7 +104,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
       }
       .modifier(ScrollOffsetObserver(onChange: onScrollOffsetChange))
       .refreshable {
-        await model.refresh()
+        await model.pullToRefresh()
       }
 
       .overlay {

@@ -144,6 +144,18 @@ public final class PagedListModel<Item: Identifiable> {
     await loadFirstPage(keepingItemsOnFailure: true)
   }
 
+  /// 用户下拉触发的刷新（列表组件的 `.refreshable` 调这个）。
+  /// 和 `refresh()` 一样重拉第一页；区别是已有数据时占位层不盖 loading（顶部已经有系统的刷新圈）。
+  /// 切筛选条件等程序触发的 `refresh()` 仍然盖 loading，因为旧内容已经不对应新的条件
+  public func pullToRefresh() async {
+    isPullRefreshing = true
+    defer { isPullRefreshing = false }
+    await refresh()
+  }
+
+  /// 是否正在执行 `pullToRefresh()`
+  public private(set) var isPullRefreshing = false
+
   // MARK: 上拉加载更多
 
   /// 加载下一页。重复调用是安全的：正在加载或已到底时直接返回。
