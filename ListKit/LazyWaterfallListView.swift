@@ -91,6 +91,8 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
               }
             }
             .padding(.horizontal, horizontalInset)
+            // 盖 loading 占位层（如切筛选条件重新拉首屏）时隐藏旧内容，否则骨架会叠在旧卡片上
+            .modifier(HidesUnderLoadingMask(model: model))
           }
 
           // 只负责显示加载/失败/到底状态，触发交给每列最后一个元素的 onAppear。
@@ -103,9 +105,7 @@ public struct LazyWaterfallListView<Item: Identifiable, Cell: View>: View {
         withAnimation(.snappy) { proxy.scrollTo(Self.topAnchorID, anchor: .top) }
       }
       .modifier(ScrollOffsetObserver(onChange: onScrollOffsetChange))
-      .refreshable {
-        await model.pullToRefresh()
-      }
+      .modifier(PullToRefreshOnRelease(model: model))
 
       .overlay {
         PagedListPlaceholder(model: model, appearance: appearance)

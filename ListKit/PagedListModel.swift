@@ -104,6 +104,15 @@ public final class PagedListModel<Item: Identifiable> {
 
   public var isRefreshingFirstPage: Bool { phase == .loadingFirstPage && !items.isEmpty }
 
+  /// 是否正在盖首屏 loading 占位层。
+  ///
+  /// 首屏加载中都盖（切筛选条件等程序触发的刷新，旧内容已经不对应新条件）；
+  /// 例外：用户下拉刷新且已有数据，顶部已经有系统刷新圈，不再盖住列表。
+  /// 盖占位层期间，列表组件会把旧内容隐藏，避免骨架叠在旧 cell 上。
+  public var isShowingLoadingMask: Bool {
+    phase == .loadingFirstPage && !(isPullRefreshing && !items.isEmpty)
+  }
+
   // MARK: 首屏
 
   /// 只在还没加载过时加载首屏（可以直接挂在 `.task` 上）。
